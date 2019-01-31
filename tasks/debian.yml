@@ -1,1 +1,56 @@
- 
+- name: 1. Install OpenVPN client
+  yum:
+    name: openvpn
+    state: latest
+
+- name: 2. Disable selinux
+  selinux:
+    state: disabled
+
+- name: 3. Deploy OpenVPN
+  template:
+    src: client-ubuntu.j2
+    dest: "/etc/openvpn/client.conf"
+
+- name: 4. Set ip forward
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: 5. Stop firewalld service
+  service: name=firewalld state=stopped enabled=no
+
+- name: 6. Install iptables-services
+  yum:
+    name: iptables-services
+    state: latest
+
+- name: 7. OpenVPN service
+  service: name=openvpn@client.service enabled=yes
+
+- name: 8. Deploy OpenVPN service
+  template:
+    src: service.j2
+    dest: "/usr/lib/systemd/system/openvpn@.service"
+
+- name: 9. just force systemd to reread configs (2.4 and above)
+  systemd:
+    daemon_reload: yes
+
+- name: 10. LAN magic
+  shell: iptables -t nat -A POSTROUTING -s 192.168.4.0/24 -o tun0 -j MASQUERADE
+
+- name: 11. LAN magic
+  shell: iptables -t nat -A POSTROUTING -s 172.27.232.0/21 -o ens192 -j MASQUERADE
+
+- name: 12. LAN magic
+  shell: service iptables save
+
+- name: 13. Iptables service
+  service: name=iptables state=restarted enabled=yes
+
+- name: 14. OpenVPN service
+  service: name=openvpn@client.service state=restarted enabled=yes
