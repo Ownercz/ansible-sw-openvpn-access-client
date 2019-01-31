@@ -1,0 +1,102 @@
+---
+- name: 1.Check if EPEL repo is already configured.
+  stat: path={{ epel_repofile_path }}
+  register: epel_repofile_result
+ 
+- name: 2.Install EPEL repo.
+  yum:
+    name: "{{ epel_repo_url }}"
+    state: present
+  register: result
+  when: not epel_repofile_result.stat.exists
+ 
+- name: 3.Import EPEL GPG key.
+  rpm_key:
+    key: "{{ epel_repo_gpg_key_url }}"
+    state: present
+  when: not epel_repofile_result.stat.exists
+
+- name: 4. Install OpenVPN client
+  yum:
+    name: openvpn
+    state: latest
+  
+- selinux:
+    state: disabled
+  
+- name: 5. Deploy OpenVPN
+  template:
+    src: client-vps02.j2
+    dest: "/etc/openvpn/client.conf"
+  when: '"tun02" in inventory_hostname_short'  
+- name: 5. Deploy OpenVPN
+  template:
+    src: client-vps01.j2
+    dest: "/etc/openvpn/client.conf"
+  when: '"tun01" in inventory_hostname_short'
+- name: 5. Deploy OpenVPN
+  template:
+    src: client-vps03.j2
+    dest: "/etc/openvpn/client.conf"
+  when: '"tun03" in inventory_hostname_short'
+- name: 5. Deploy OpenVPN
+  template:
+    src: client-vps04.j2
+    dest: "/etc/openvpn/client.conf"
+  when: '"tun04" in inventory_hostname_short'
+- name: 5. Deploy OpenVPN
+  template:
+    src: client-vps05.j2
+    dest: "/etc/openvpn/client.conf"
+  when: '"tun05" in inventory_hostname_short'  
+- sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes  
+- name: 8. Stop firewalld service
+  service: name=firewalld state=stopped enabled=no 
+- name: 4. Install iptables-services
+  yum:
+    name: iptables-services
+    state: latest  
+- name: 8. OpenVPN service
+  service: name=openvpn@client.service enabled=yes
+  
+- name: 6. Deploy OpenVPN service
+  template:
+    src: service.j2
+    dest: "/usr/lib/systemd/system/openvpn@.service"
+- name: 7. just force systemd to reread configs (2.4 and above)
+  systemd:
+    daemon_reload: yes    
+# - name: 7. Deploy OpenVPN auth
+  # template:
+    # src: auth.j2
+    # dest: "/etc/openvpn/auth.cfg" 
+- name: 8. LAN magic
+  shell: iptables -t nat -A POSTROUTING -s 192.168.1.0/24 -o tun0 -j MASQUERADE 
+- name: 9. LAN magic
+  shell: iptables -t nat -A POSTROUTING -s 172.27.232.0/21 -o ens192 -j MASQUERADE
+- name: 10. LAN magic
+  shell: service iptables save
+- name: 11. Iptables service
+  service: name=iptables state=restarted enabled=yes
+      
+- name: 12. OpenVPN service
+  service: name=openvpn@client.service state=restarted enabled=yes
+  
+ 
+# - name: LAN magic
+  # shell: echo 1 > /proc/sys/net/ipv4/ip_forward  
+# - name: LAN magic
+  # shell: ip addr flush dev tap0  
+# - name: LAN magic
+  # shell: ip route add 192.168.1.0/24 via {{ lanip }}
+# - name: 9. OpenVPN service
+  # service: name=openvpn@client.service state=restarted enabled=yes  
+  #ip addr flush dev tap0
+  # ip route add 192.168.1.0/24 via 192.168.1.42
+  # firewall-cmd --zone=trusted --add-interface=tun0
+  # echo 1 > /proc/sys/net/ipv4/ip_forward
